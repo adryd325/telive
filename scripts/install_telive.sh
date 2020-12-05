@@ -17,6 +17,7 @@
 # Everything is the responsibility of the user.
 #
 # Changelog:
+# 20201105: add support for ubuntu 20 --adryd
 # 20181211: add support for debian 10 --sq5bpf
 # 20170709: add support for linux mint 18.2 and debian 9, both are totally untested --sq5bpf
 # 20160905: support gnuradio 3.7.x, where x>=10 --sq5bpf
@@ -162,7 +163,7 @@ install_gnuradio() {
 							sudo apt-get install -y gqrx-sdr gnuradio gr-osmosdr hackrf python-numpy && \
 							return 0
 													;;
-												"ubuntu 15"|"ubuntu 16"|"ubuntu 17"*|"ubuntu 18"*|"ubuntu 19"*) 
+												"ubuntu 15"|"ubuntu 16"|"ubuntu 17"*|"ubuntu 18"*|"ubuntu 19"*|"ubuntu 20"*) 
 													sudo apt-get -y install gnuradio gnuradio-dev gr-osmosdr gr-iqbal gqrx-sdr python-numpy && return 0
 													;;
 												*)
