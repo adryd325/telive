@@ -1,6 +1,5 @@
 Telive receivers with unix pipe transport:
 
-gr3.6 - directory with receivers for gnuradio 3.6
 telive_1ch_gr37.grc - 1 channel receiver
 telive_1ch_simple_gr37.grc - 1 channel receiver with a simple point and click
 interface, useful for beginners

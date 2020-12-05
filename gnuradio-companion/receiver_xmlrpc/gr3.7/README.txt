@@ -1,8 +1,8 @@
 Telive receivers with UDP transport and XMLRPC control, and helper files:
 
-kill_wrapper - a script to run an application and kill it when  ^C is
+../kill_wrapper - a script to run an application and kill it when  ^C is
 pressed. takes the command to be ran as argument, 
-for example ./kill_wrapper ./telive_6ch_gr37_udp_xmlrpc_headless.py
+for example ../kill_wrapper ./telive_6ch_gr37_udp_xmlrpc_headless.py
 
 telive_1ch_gr37_udp_xmlrpc_headless.grc - headless 1 channel receiver grc
 script
