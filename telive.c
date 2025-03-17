@@ -184,6 +184,17 @@ struct usi {
 	int lastrx;
 };
 
+struct tgmap {
+	int tg;
+	int usage;
+	int dl;
+};
+
+struct dlmap {
+	int dl;
+	int rxid;
+};
+
 struct opisy {
 	unsigned int ssi;
 	char *opis;
@@ -537,8 +548,35 @@ void clear_locations() {
 	kml_locations=NULL;
 }
 
-#define MAXUS 64
+#define MAXUS 192
+#define MAXTG 1000
+#define MAXDL 4
 struct usi ssis[MAXUS];
+struct tgmap tgs[MAXTG];
+int downlinks[MAXDL];
+
+int tgssize = 0;
+void settgusage(int usage, int ssi, int dl) {
+    int index = gettgusageidx(ssi); 
+    if (index == -1) {
+        tgs[tgssize].tg = ssi;
+		tgs[tgssize].usage = usage;
+		tgs[tgssize].dl = dl;
+        tgssize++; 
+    } 
+    else { // Key found 
+		tgs[index].usage = usage;
+    } 
+}
+
+int gettgusageidx(int ssi) {
+    for (int i = 0; i < MAXTG; i++) { 
+        if (ssi == tgs[i].tg) { 
+            return i;
+        } 
+    } 
+    return -1;
+}
 
 void diep(char *s)
 {
@@ -555,7 +593,7 @@ int getr(int idx) {
 
 int getcl(int idx)
 {
-	return ((idx/RR)*40);
+	return ((idx/RR)*10);
 }
 
 /* update usage identifier display */
@@ -566,28 +604,30 @@ void updidx(int idx) {
 	int row=getr(idx);
 	int col=getcl(idx);
 	int bold=0;
+	int playing=0;
 
 	if ((idx<0)||(idx>=MAXUS)) { wprintw(statuswin,"BUG! updidx(%i)\n",idx); wrefresh(statuswin); return; }
 
 	opis[0]=0;
 	opis2[0]=0;
 	wmove(mainwin,row,col+5);
-	if (ssis[idx].active) strcat(opis,"OK ");
+	if (ssis[idx].active) { bold=1; strcat(opis,"T"); }
 	//	if (ssis[idx].timeout) strcat(opis,"timeout ");
-	if (ssis[idx].encr) strcat(opis,"ENCR ");
-	if ((ssis[idx].play)&&(ssis[idx].active)) { bold=1; strcat(opis,"*PLAY* "); }
-	if (ssis[idx].cid) { sprintf(opis2,"%i [%i]",ssis[idx].cid,ssis[idx].lastrx);  }
-	if (bold) wattron(mainwin,A_BOLD|COLOR_PAIR(1));
-	wprintw(mainwin,"%-20s %10s",opis,opis2);
+	if (ssis[idx].encr) strcat(opis,"");
+	if ((ssis[idx].play)&&(ssis[idx].active)) { playing=1; strcat(opis,"P"); }
+	// if (ssis[idx].cid) { sprintf(opis2,"%i [%i]",ssis[idx].cid,ssis[idx].lastrx);  }
+	if (bold) wattron(mainwin,A_BOLD|COLOR_PAIR(3));
+	if (playing) wattron(mainwin,A_BOLD|COLOR_PAIR(1));
+	wprintw(mainwin,"%2s",opis);
 	if (bold) wattroff(mainwin,COLOR_PAIR(1));
 	for (i=0;i<3;i++) {
-		wmove(mainwin,row+i+1,col+5);
+		wmove(mainwin,row+i+1,col);
 		if (ssis[idx].ssi[i]) {
-			wprintw(mainwin,"%8i %20s",ssis[idx].ssi[i],lookupssi(ssis[idx].ssi[i]));
+			wprintw(mainwin,"%6i",ssis[idx].ssi[i],lookupssi(ssis[idx].ssi[i]));
 		}
 		else 
 		{
-			wprintw(mainwin,"                              ");
+			wprintw(mainwin,"       ");
 
 		}
 	}
@@ -760,6 +800,7 @@ int releasessi(int ssi)
 				ssis[i].play=0;
 				ssis[i].lastrx=0;
 				ssis[i].cid=0;
+				ssis[i].ssi[j]=0;
 				updidx(i);
 				ref=1;
 			}
@@ -1069,8 +1110,8 @@ int insert_freq2(struct freqinfo **freqptr,int reason,uint16_t mnc,uint16_t mcc,
 		known=1;
 	}	
 	if ((verbose)&&(reason!=REASON_NETINFO)) {
-		wprintw(statuswin,"Down:%3.4fMHz Up:%3.4fMHz LA:%i MCC:%i MNC:%i reason:%i RX:%i\n",dlf/1000000.0,ulf/1000000.0,la,mcc,mnc,reason,rx);
-		wrefresh(statuswin);
+		// wprintw(statuswin,"Down:%3.4fMHz Up:%3.4fMHz LA:%i MCC:%i MNC:%i reason:%i RX:%i\n",dlf/1000000.0,ulf/1000000.0,la,mcc,mnc,reason,rx);
+		// wrefresh(statuswin);
 	}
 	ptr->last_change=time(0);
 	ptr->ul_freq=ulf;
@@ -1330,7 +1371,7 @@ int findtoplay(int first)
 	releaselock();
 
 	for (i=first;i<MAXUS;i++) {
-		if ((ssis[i].active)&&(!ssis[i].encr)&&(matchidx(i)&&(trylock()))) {
+		if ((ssis[i].active)&&(!ssis[i].encr)&&((mutessi)&&!(!ssis[i].ssi[0])&&(!ssis[i].ssi[1])&&(!ssis[i].ssi[2]))&&(matchidx(i)&&(trylock()))) {
 			curplayingidx=i;
 			if (verbose>0) wprintw(statuswin,"NOW PLAYING %i\n",i);
 			ref=1;
@@ -1338,7 +1379,7 @@ int findtoplay(int first)
 		}
 	}
 	for (i=0;i<first;i++) {
-		if ((ssis[i].active)&&(!ssis[i].encr)&&(matchidx(i)&&(trylock()))) {
+		if ((ssis[i].active)&&(!ssis[i].encr)&&((mutessi)&&!(!ssis[i].ssi[0])&&(!ssis[i].ssi[1])&&(!ssis[i].ssi[2]))&&(matchidx(i)&&(trylock()))) {
 			curplayingidx=i;
 			if (verbose>0) wprintw(statuswin,"NOW PLAYING %i\n",i);
 			ref=1;
@@ -1919,6 +1960,10 @@ void foundfreq(int rxid) {
 	}
 }
 
+int getucallid(int tra, int rxid) {
+	return tra + ((rxid-1) * 64);
+}
+
 int parsestat(char *c)
 {
 	char *func;
@@ -1926,10 +1971,12 @@ int parsestat(char *c)
 	int idtype=0;
 	int ssi=0;
 	int ssi2=0;
-	int usage=0;
+	int tra=0;
 	int encr=0;
 	int writeflag=1;
 	int sameinfo=0;
+	int usage=0;
+	int carrierid=0;
 
 	char tmpstr[BUFLEN*2];
 	char tmpstr2[BUFLEN*2];
@@ -1953,11 +2000,13 @@ int parsestat(char *c)
 	idtype=getptrint(c,"IDT:",10);
 	ssi=getptrint(c,"SSI:",10);
 	ssi2=getptrint(c,"SSI2:",10);
-	usage=getptrint(c,"IDX:",10);
+	tra=getptrint(c,"IDX:",10);
 	encr=getptrint(c,"ENCR:",10);
 	rxid=getptrint(c,"RX:",10);
 	callidentifier=getptrint(c,"CID:",10);
+	carrierid=getptrint(c,"CARRIERID:",10);
 
+	usage = getucallid(tra, rxid);
 
 	if (cmpfunc(func,"BURST")) {
 		update_receivers(rxid);
@@ -2090,98 +2139,145 @@ int parsestat(char *c)
 	}
 
 
-	if (cmpfunc(func,"DSETUPDEC"))
+	// if (cmpfunc(func,"DSETUPDEC"))
+	// {
+	// 	if (usage) {
+	// 		addssi(usage,ssi);
+	// 		addssi(usage,ssi2);
+	// 		updidx(usage);
+	// 	} 
+	// 	if (callidentifier) {
+	// 		i=addcallssi(callidentifier,ssi);
+	// 		if (i) updidx(i);
+	// 		if (ssi2) {
+	// 			i=addcallssi(callidentifier,ssi2);
+	// 			if (i) updidx(i);
+	// 		}
+
+	// 	}
+
+	// }
+	// if (cmpfunc(func,"DCONNECTDEC"))
+	// {
+	// 	addssi(usage,ssi);
+	// 	addssi(usage,ssi2);
+	// 	addcallident(usage,callidentifier,rxid);
+	// 	updidx(usage);
+	// }
+
+	// if (cmpfunc(func,"DTXGRANTDEC"))
+	// {
+	// 	i=getptrint(c,"TXGRANT:",10);
+	// 	/*  0 - transmission granted, 3 - transmission granted to  another user (not sure if this should be included) */
+	// 	if ((i==0)||(i==3)) { 
+	// 		i=addcallssi(callidentifier,ssi);
+	// 		if (i) updidx(i);
+	// 		if (ssi2) { 
+	// 			i=addcallssi(callidentifier,ssi2);
+	// 			if (i) updidx(i);
+	// 		}
+	// 	}
+	// }
+
+	// if (cmpfunc(func,"SDSDEC")) {
+	// 	callingssi=getptrint(c,"CallingSSI:",10);
+	// 	calledssi=getptrint(c,"CalledSSI:",10);
+	// 	sdsbegin=strstr(c,"DATA:");
+	// 	latptr=getptr(c," lat:");
+	// 	lonptr=getptr(c," lon:");
+	// 	if ((strstr(c,"Text")))
+	// 	{ 
+	// 		wprintw(statuswin,"SDS %i->%i %s\n",callingssi,calledssi,sdsbegin);
+	// 		ref=1;
+
+
+	// 	}
+	// 	/* handle location */
+	// 	if ((kml_tmp_file)&&(strstr(c,"INVALID_POSITION")==0)&&(latptr)&&(lonptr))
+	// 	{
+	// 		lattitude=atof(latptr);
+	// 		longtitude=atof(lonptr);
+	// 		t=latptr;
+	// 		while ((*t)&&(*t!=' ')) { 
+	// 			if (*t=='S') { lattitude=-lattitude; break; }
+	// 			t++;
+	// 		}
+	// 		t=lonptr;
+	// 		while ((*t)&&(*t!=' ')) { 
+	// 			if (*t=='W') { longtitude=-longtitude; break; }
+	// 			t++;
+	// 		}
+	// 		add_location(callingssi,lattitude,longtitude,c);
+
+	// 	}
+	// }
+	// if (idtype==ADDR_TYPE_SSI_USAGE) {
+	// 	if (cmpfunc(func,"D-SETUP"))
+	// 	{
+
+	// 		wprintw(statuswin,"USAGE: %i, RXID: %i, SSI1: %i\n", usage, rxid, ssi);
+	// 		addssi(usage,ssi);
+	// 		updidx(usage);
+	// 	}
+	// 	if (cmpfunc(func,"D-CONNECT"))
+	// 	{
+	// 		addssi(usage,ssi);
+	// 		updidx(usage);
+	// 	}
+
+	// }
+
+	if (cmpfunc(func,"DRELEASEDEC"))
 	{
-		if (usage) {
-			addssi(usage,ssi);
-			addssi(usage,ssi2);
-			updidx(usage);
-		} 
-		if (callidentifier) {
-			i=addcallssi(callidentifier,ssi);
-			if (i) updidx(i);
-			if (ssi2) {
-				i=addcallssi(callidentifier,ssi2);
-				if (i) updidx(i);
-			}
-
-		}
-
-	}
-	if (cmpfunc(func,"DCONNECTDEC"))
-	{
-		addssi(usage,ssi);
-		addssi(usage,ssi2);
-		addcallident(usage,callidentifier,rxid);
-		updidx(usage);
-
-	}
-
-	if (cmpfunc(func,"DTXGRANTDEC"))
-	{
-		i=getptrint(c,"TXGRANT:",10);
-		/*  0 - transmission granted, 3 - transmission granted to  another user (not sure if this should be included) */
-		if ((i==0)||(i==3)) { 
-			i=addcallssi(callidentifier,ssi);
-			if (i) updidx(i);
-			if (ssi2) { 
-				i=addcallssi(callidentifier,ssi2);
-				if (i) updidx(i);
-			}
-		}
-	}
-
-	if (cmpfunc(func,"SDSDEC")) {
-		callingssi=getptrint(c,"CallingSSI:",10);
-		calledssi=getptrint(c,"CalledSSI:",10);
-		sdsbegin=strstr(c,"DATA:");
-		latptr=getptr(c," lat:");
-		lonptr=getptr(c," lon:");
-		if ((strstr(c,"Text")))
-		{ 
-			wprintw(statuswin,"SDS %i->%i %s\n",callingssi,calledssi,sdsbegin);
-			ref=1;
-
-
-		}
-		/* handle location */
-		if ((kml_tmp_file)&&(strstr(c,"INVALID_POSITION")==0)&&(latptr)&&(lonptr))
-		{
-			lattitude=atof(latptr);
-			longtitude=atof(lonptr);
-			t=latptr;
-			while ((*t)&&(*t!=' ')) { 
-				if (*t=='S') { lattitude=-lattitude; break; }
-				t++;
-			}
-			t=lonptr;
-			while ((*t)&&(*t!=' ')) { 
-				if (*t=='W') { longtitude=-longtitude; break; }
-				t++;
-			}
-			add_location(callingssi,lattitude,longtitude,c);
-
-		}
-	}
-	if (idtype==ADDR_TYPE_SSI_USAGE) {
-		if (cmpfunc(func,"D-SETUP"))
-		{
-			addssi(usage,ssi);
-			updidx(usage);
-		}
-		if (cmpfunc(func,"D-CONNECT"))
-		{
-			addssi(usage,ssi);
-			updidx(usage);
-		}
-
-	}
-	if (cmpfunc(func,"D-RELEASE"))
-	{
+		int i,j;
 		/* don't use releasessi for now, as we can have the same ssi 
 		 * on different usage identifiers. one day this should be 
 		 * done properly with notif. ids */
-		//		releasessi(ssi);
+		// releasessi(ssi);
+		// wprintw(msgwin,"REL SSI: %i\n", ssi);
+	}
+
+	if (cmpfunc(func,"DSETUPDEC"))
+	{
+		settgusage(tra,ssi,carrierid);
+		for (int i = 0; i < MAXDL; i++) { 
+			if (carrierid == downlinks[i] && carrierid != 0) {
+				usage =  getucallid(tra, i);
+				wprintw(statuswin,"ADD SSI: %i, %i, %i\n",tra, ssi, usage);
+				wprintw(statuswin,"DLMAP: %i, %i, %i\n", downlinks[1], downlinks[2],downlinks[3]);
+				addssi(usage, ssi);
+				updidx(usage);
+			} 
+		} 
+		wprintw(statuswin,"MAP SSI: %i, %i, %i\n",tra, ssi, carrierid);
+		// wprintw(statuswin,"D_SETUP: %s\n",c);
+		
+	}
+
+	if (cmpfunc(func,"DTXGRANTDEC") || (cmpfunc(func,"D-TX GRANTED")))
+	{	
+		if (gettgusageidx(ssi) != -1) {
+			usage = getucallid(tgs[gettgusageidx(ssi)].usage, rxid);
+			downlinks[rxid] = tgs[gettgusageidx(ssi)].dl;
+			wprintw(statuswin,"ADD SSI: %i, %i\n",usage, ssi);
+			wprintw(statuswin,"DLMAP: %i, %i, %i\n", downlinks[1], downlinks[2],downlinks[3]);
+			addssi(usage, ssi);
+			updidx(usage);
+		} else {
+			wprintw(statuswin,"COULDNT ADD SSI: %i\n", ssi);
+		}
+		// wprintw(statuswin,"D_TX: %s\n",func);
+		
+	}
+
+	if (cmpfunc(func,"SDSDEC")) {
+		writeflag=0;
+	}
+	if (cmpfunc(func,"D-SDS")) {
+		writeflag=0;
+	}
+	if (cmpfunc(func,"SDS")) {
+		writeflag=0;
 	}
 
 
@@ -2207,6 +2303,7 @@ int parsestat(char *c)
 int parsetraffic(unsigned char *buf)
 {
 	unsigned char *c;
+	int tra;
 	int usage;
 	int len=1380;
 	time_t tt=time(0);
@@ -2214,14 +2311,16 @@ int parsetraffic(unsigned char *buf)
 	int rxid;
 	struct receiver *ptr;
 
-	usage=getptrint((char *)buf,"TRA:",16);
+	tra=getptrint((char *)buf,"TRA:",16);
 	rxid=getptrint((char *)buf,"RX:",16);
+
+	usage=getucallid(tra, rxid);
 
 	/* don't process data from muted receivers */
 	ptr=find_receiver(rxid);
 	if ((ptr)&&(ptr->state&RX_MUTED)) return(0);
 
-	if ((usage<1)||(usage>63)) return(0);
+	// if ((usage<1)||(usage>63)) return(0);
 	c=buf+13;
 
 	if (!ssis[usage].active) {

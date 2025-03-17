@@ -1,0 +1,6 @@
+default.nix
+start3_sdrpp.sh
+*.gch
+*.o
+telive
+telive.log

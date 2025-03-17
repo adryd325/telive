@@ -1,0 +1,12 @@
+{
+  "editor.formatOnSave": false,
+  "files.associations": {
+    "telive_receiver.h": "c",
+    "array": "c",
+    "string_view": "c",
+    "format": "c",
+    "initializer_list": "c",
+    "span": "c",
+    "valarray": "c"
+  }
+}
